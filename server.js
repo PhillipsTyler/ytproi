@@ -1,54 +1,67 @@
 import express from "express";
+import { Innertube } from "youtubei";
 import cors from "cors";
-import { Innertube } from "youtubei.js";
 
 const app = express();
 app.use(cors());
 
 let yt;
 
+// Initialize once
 (async () => {
   yt = await Innertube.create();
   console.log("YouTube Proxy Ready");
 })();
 
-/* --------------------------- SEARCH PROXY ---------------------------- */
+// SEARCH ENDPOINT
 app.get("/search", async (req, res) => {
   try {
     const q = req.query.q;
-    if (!q) return res.json({ items: [] });
+    if (!q) return res.json({ error: "Missing query" });
 
-    const result = await yt.search(q);
+    const results = await yt.search(q, { type: "video" });
 
-    const items = result.videos.map(v => ({
-      videoId: v.id,
+    res.json(results.videos.map(v => ({
+      id: v.id,
       title: v.title.text,
-      thumbnail: v.thumbnails[0].url
-    }));
+      thumb: v.thumbnails[0].url
+    })));
 
-    res.json({ items });
   } catch (err) {
     console.error(err);
-    res.json({ error: "Search failed" });
+    res.json({ error: "search_failed" });
   }
 });
 
-/* ---------------------------- VIDEO PROXY ---------------------------- */
-app.get("/watch/:id", async (req, res) => {
+// STREAM ENDPOINT
+app.get("/stream", async (req, res) => {
   try {
-    const videoId = req.params.id;
+    const id = req.query.v;
+    if (!id) return res.status(400).send("Missing video id");
 
-    const info = await yt.getInfo(videoId);
-    const stream = await info.download();
+    const info = await yt.getInfo(id);
+    const stream = await info.getStreamingData();
+
+    if (!stream || !stream.formats.length)
+      return res.send("No stream formats found");
+
+    const best = stream.formats.find(f => f.mime_type.includes("mp4"));
+
+    if (!best) return res.send("No mp4 stream available");
+
+    const videoStream = await yt.download(id, {
+      format: "mp4",
+      quality: "360p"
+    });
 
     res.setHeader("Content-Type", "video/mp4");
-    stream.pipe(res);
+    videoStream.pipe(res);
 
   } catch (err) {
     console.error(err);
-    res.status(500).send("Video proxy error");
+    res.send("stream_failed");
   }
 });
 
-/* ---------------------------- START SERVER --------------------------- */
-app.listen(8080, () => console.log("YT Proxy running on port 8080"));
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => console.log("YT Proxy running on port", PORT));
