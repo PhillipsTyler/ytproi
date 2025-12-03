@@ -1,14 +1,12 @@
 {
-  "name": "yt-full-proxy",
+  "name": "yt-proxy",
   "version": "1.0.0",
   "type": "module",
-  "main": "server.js",
-  "dependencies": {
-    "express": "^4.19.2",
-    "cors": "^2.8.5",
-    "youtubei": "^7.0.2"
-  },
   "scripts": {
     "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "youtube-sr": "^5.0.0"
   }
 }
