@@ -1,43 +1,54 @@
 import express from "express";
+import cors from "cors";
 import { Innertube } from "youtubei.js";
 
 const app = express();
-const port = process.env.PORT || 8080;
+app.use(cors());
 
 let yt;
 
-async function init() {
+(async () => {
   yt = await Innertube.create();
   console.log("YouTube Proxy Ready");
-}
+})();
 
-app.get("/", (req, res) => {
-  res.send("YouTube Full Proxy is running");
-});
-
-app.get("/video", async (req, res) => {
+/* --------------------------- SEARCH PROXY ---------------------------- */
+app.get("/search", async (req, res) => {
   try {
-    const id = req.query.v;
-    if (!id) return res.status(400).send("Missing video id ?v=");
-    
-    const info = await yt.getInfo(id);
+    const q = req.query.q;
+    if (!q) return res.json({ items: [] });
 
-    // Get a proper streaming URL
-    const stream = info.streaming_data?.formats?.[0];
+    const result = await yt.search(q);
 
-    if (!stream) {
-      return res.status(500).send("No stream URL available");
-    }
+    const items = result.videos.map(v => ({
+      videoId: v.id,
+      title: v.title.text,
+      thumbnail: v.thumbnails[0].url
+    }));
 
-    res.redirect(stream.url);
-  } catch (e) {
-    console.error(e);
-    res.status(500).send("Error fetching video");
+    res.json({ items });
+  } catch (err) {
+    console.error(err);
+    res.json({ error: "Search failed" });
   }
 });
 
-app.listen(port, () =>
-  console.log(`YT Proxy running on port ${port}`)
-);
+/* ---------------------------- VIDEO PROXY ---------------------------- */
+app.get("/watch/:id", async (req, res) => {
+  try {
+    const videoId = req.params.id;
 
-init();
+    const info = await yt.getInfo(videoId);
+    const stream = await info.download();
+
+    res.setHeader("Content-Type", "video/mp4");
+    stream.pipe(res);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Video proxy error");
+  }
+});
+
+/* ---------------------------- START SERVER --------------------------- */
+app.listen(8080, () => console.log("YT Proxy running on port 8080"));
